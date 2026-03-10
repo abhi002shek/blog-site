@@ -140,7 +140,7 @@ a. Create sealed file for Mongo Secrets
 
 ```
 kubectl create secret generic mongo-secrets \
-  --from-literal=MONGO_INITDB_ROOT_USERNAME=admin --from-literal=MONGO_INITDB_ROOT_PASSWORD=mongodb123 \
+  --from-literal=MONGO_INITDB_ROOT_USERNAME=<your-username> --from-literal=MONGO_INITDB_ROOT_PASSWORD=<your-password> \
   --dry-run=client -o yaml | \
 kubeseal \
   --controller-name sealed-secrets-controller \
@@ -152,7 +152,7 @@ b. Create sealed files for Backend URL
 
 ```
 kubectl create secret generic backend-secrets \
-  --from-literal=MONGO_URI="mongodb://admin:mongodb123@mongo-service:27017/mydb?authSource=admin" \
+  --from-literal=MONGO_URI="mongodb://<username>:<password>@mongo-service:27017/mydb?authSource=admin" \
   --dry-run=client -o yaml | \
 kubeseal \
   --controller-name sealed-secrets-controller \
