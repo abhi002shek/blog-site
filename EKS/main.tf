@@ -154,25 +154,29 @@ resource "aws_eks_cluster" "blog_site" {
 }
 
 
-resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name = aws_eks_cluster.blog_site.name
-  addon_name   = "aws-ebs-csi-driver"
+# EBS CSI Driver - Install manually after cluster creation
+# Requires OIDC provider and IAM role
+# See COMPLETE-DEPLOYMENT-GUIDE.md Step 2
 
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "OVERWRITE"
-
-  depends_on = [
-    aws_eks_cluster.blog_site,
-    aws_eks_node_group.blog_site
-  ]
-
-  tags = {
-    Name        = "blog-site-ebs-csi-driver"
-    Project     = "blog-site"
-    Environment = "production"
-    ManagedBy   = "terraform"
-  }
-}
+# resource "aws_eks_addon" "ebs_csi_driver" {
+#   cluster_name = aws_eks_cluster.blog_site.name
+#   addon_name   = "aws-ebs-csi-driver"
+# 
+#   resolve_conflicts_on_create = "OVERWRITE"
+#   resolve_conflicts_on_update = "OVERWRITE"
+# 
+#   depends_on = [
+#     aws_eks_cluster.blog_site,
+#     aws_eks_node_group.blog_site
+#   ]
+# 
+#   tags = {
+#     Name        = "blog-site-ebs-csi-driver"
+#     Project     = "blog-site"
+#     Environment = "production"
+#     ManagedBy   = "terraform"
+#   }
+# }
 
 
 resource "aws_eks_node_group" "blog_site" {
@@ -187,7 +191,7 @@ resource "aws_eks_node_group" "blog_site" {
     min_size     = 3
   }
 
-  instance_types = ["t2.medium"]
+  instance_types = ["t3.medium"]
 
   remote_access {
     ec2_ssh_key               = var.ssh_key_name
