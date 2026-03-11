@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - storage-class.yml
+  - mongo-sealedsecret.yml
+  - backend-sealedsecret.yml
+  - mongo-sts.yml
+  - mongo-service.yml
+  - backend-config.yml
+  - backend.yml
+  - backend-service.yml
+  - frontend-config.yml
+  - frontend.yml
+  - frontend-service.yml
+  - ingress.yml
+
+images:
+  - name: blog-site-frontend
+    newName: abhi00shek/blog-site-frontend
+    newTag: latest
+  - name: blog-site-backend
+    newName: abhi00shek/blog-site-backend
+    newTag: latest

@@ -22,7 +22,7 @@ spec:
               topologyKey: topology.kubernetes.io/zone
       containers:
         - name: backend
-          image: YOUR-DOCKERHUB-USERNAME/blog-site-backend:v1
+          image: blog-site-backend
           ports:
             - containerPort: 5000
           envFrom:

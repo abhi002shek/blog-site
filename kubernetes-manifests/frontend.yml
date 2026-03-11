@@ -24,7 +24,7 @@ spec:
               topologyKey: topology.kubernetes.io/zone
       containers:
         - name: frontend
-          image: YOUR-DOCKERHUB-USERNAME/blog-site-frontend:v1
+          image: blog-site-frontend
           ports:
             - containerPort: 80
           envFrom:

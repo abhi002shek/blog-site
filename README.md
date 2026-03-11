@@ -1,6 +1,6 @@
-# Blog-Site - Complete Deployment Guide for Linux
+# Blog-Site - GitOps Deployment with ArgoCD
 
-A full-stack blog application with React frontend, Node.js backend, and MongoDB database, deployed on AWS EKS with automated CI/CD.
+A full-stack blog application with React frontend, Node.js backend, and MongoDB database, deployed on AWS EKS with security scanning and using GitOps methodology with ArgoCD and automated CI/CD pipeline.
 
 ## Architecture Overview
 
@@ -9,7 +9,7 @@ A full-stack blog application with React frontend, Node.js backend, and MongoDB 
 │                         Internet                             │
 └────────────────────────┬────────────────────────────────────┘
                          │
-                    DuckDNS Domain
+                       Domain
                   (blogsite.duckdns.org)
                          │
                          ▼
@@ -40,6 +40,43 @@ A full-stack blog application with React frontend, Node.js backend, and MongoDB 
                                │  (Persistent)   │
                                └─────────────────┘
 ```
+
+---
+
+## Deployment Workflow
+
+This project uses a **GitOps approach** with separation of concerns:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DEPLOYMENT PIPELINE                           │
+└─────────────────────────────────────────────────────────────────┘
+
+1. Developer pushes code to GitHub (main branch)
+                    ↓
+2. GitHub Actions CI/CD Pipeline triggers:
+   ├─ Security Scan (Trivy + Gitleaks)
+   ├─ Code Quality Check (SonarQube)
+   ├─ Detect changed services (frontend/backend)
+   ├─ Build Docker images (multi-platform)
+   ├─ Scan container images (Trivy)
+   ├─ Generate SBOM (Software Bill of Materials)
+   └─ Push to Docker Hub with version tags
+                    ↓
+3. Update Kubernetes manifests with new image tags
+                    ↓
+4. ArgoCD detects manifest changes in Git
+                    ↓
+5. ArgoCD syncs and deploys to EKS cluster
+```
+
+**Why this approach?**
+
+- **CI/CD (GitHub Actions)**: Handles build, test, security scanning, and image publishing
+- **ArgoCD (GitOps)**: Handles deployment, ensuring cluster state matches Git repository
+- **Separation**: Build pipeline doesn't need cluster access; deployment is declarative and auditable
+- **Rollback**: Easy rollback by reverting Git commits
+- **Visibility**: ArgoCD UI shows deployment status and history
 
 ---
 
@@ -289,19 +326,6 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --set serviceAccount.name=aws-load-balancer-controller \
   --set vpcId=<YOUR-VPC-ID>
 ```
-###Install ArgoCD
-
-```bash
-kubectl create namespace argocd
-kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
-```
-
-You can access the ArgoCD server using Loadbalancer DNS now
-
-```bash
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
-```
 
 **Get your VPC ID:**
 ```bash
@@ -360,15 +384,66 @@ helm install sealed-secrets-controller sealed-secrets/sealed-secrets \
 kubectl get pods -n kube-system | grep sealed-secrets
 ```
 
+### Step 8: Install ArgoCD
+
+**Why?** ArgoCD implements GitOps - it continuously monitors your Git repository and automatically syncs any changes to your Kubernetes cluster. This ensures your cluster state always matches what's defined in Git.
+
+#### 8a. Install ArgoCD
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+**What this does:** Deploys ArgoCD components including:
+- API server
+- Repository server (connects to Git)
+- Application controller (syncs resources)
+- Web UI
+
+#### 8b. Expose ArgoCD Server
+
+```bash
+kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+```
+
+**What this does:** Changes the ArgoCD server service from ClusterIP to LoadBalancer, creating an AWS ELB so you can access the UI from your browser.
+
+#### 8c. Get ArgoCD Admin Password
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+```
+
+**What this does:** Retrieves the auto-generated admin password.
+
+#### 8d. Access ArgoCD UI
+
+```bash
+# Get the LoadBalancer URL
+kubectl get svc argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+
+Open the URL in your browser and login with:
+- Username: `admin`
+- Password: (from step 8c)
+
+**Verify:**
+```bash
+kubectl get pods -n argocd
+```
+
+All ArgoCD pods should be in `Running` status.
+
 ---
 
 ## Part 3: Prepare Application Secrets
 
-### Step 8: Create Sealed Secrets
+### Step 9: Create Sealed Secrets
 
 **Why?** Your MongoDB credentials need to be encrypted before storing in Git.
 
-#### 8a. Create MongoDB Sealed Secret
+#### 9a. Create MongoDB Sealed Secret
 
 ```bash
 cd ../kubernetes-manifests
@@ -390,7 +465,7 @@ kubeseal \
 
 **Important:** Replace `admin` and `mongodb123` with your own credentials!
 
-#### 8b. Create Backend Sealed Secret
+#### 9b. Create Backend Sealed Secret
 
 ```bash
 kubectl create secret generic backend-secrets \
@@ -410,11 +485,11 @@ kubeseal \
 
 ## Part 4: Build and Push Docker Images
 
-### Step 9: Build Multi-Platform Images
+### Step 10: Build Multi-Platform Images
 
 **Why multi-platform?** If you build on an ARM64 machine (Apple Silicon Mac), the images won't work on EKS (which uses AMD64). Multi-platform images work on both.
 
-#### 9a. Login to Docker Hub
+#### 10a. Login to Docker Hub
 
 ```bash
 docker login
@@ -422,7 +497,7 @@ docker login
 
 Enter your Docker Hub username and password.
 
-#### 9b. Set Up Buildx (if not already set up)
+#### 10b. Set Up Buildx (if not already set up)
 
 ```bash
 docker buildx create --name multibuilder --driver docker-container --bootstrap --use
@@ -430,7 +505,7 @@ docker buildx create --name multibuilder --driver docker-container --bootstrap -
 
 **What this does:** Creates a builder that supports building for multiple CPU architectures.
 
-#### 9c. Build and Push Backend Image
+#### 10c. Build and Push Backend Image
 
 ```bash
 cd ../server
@@ -448,7 +523,7 @@ docker buildx build \
 - Creates a manifest list that serves the right architecture automatically
 - Pushes to Docker Hub
 
-#### 9d. Build and Push Frontend Image
+#### 10d. Build and Push Frontend Image
 
 ```bash
 cd ../frontend
@@ -459,7 +534,7 @@ docker buildx build \
   --push .
 ```
 
-#### 9e. Update Kubernetes Manifests with Your Images
+#### 10e. Update Kubernetes Manifests with Your Images
 
 Edit the deployment files to use your Docker Hub username:
 
@@ -479,7 +554,7 @@ sed -i 's|abhi00shek/blog-site-frontend:v1|<YOUR-DOCKERHUB-USERNAME>/blog-site-f
 
 ## Part 5: Deploy Application to Kubernetes
 
-### Step 10: Update Ingress with Your Domain
+### Step 11: Update Ingress with Your Domain
 
 Edit `ingress.yml` and replace `blogsite.duckdns.org` with your DuckDNS domain:
 
@@ -487,7 +562,7 @@ Edit `ingress.yml` and replace `blogsite.duckdns.org` with your DuckDNS domain:
 sed -i 's|blogsite.duckdns.org|<YOUR-DOMAIN>.duckdns.org|g' ingress.yml
 ```
 
-### Step 11: Deploy All Components
+### Step 12: Deploy All Components
 
 ```bash
 # Deploy storage class (defines how to provision EBS volumes)
@@ -536,7 +611,7 @@ kubectl apply -f ingress.yml
 - **frontend-service.yml**: Service to expose frontend
 - **ingress.yml**: Ingress resource (triggers ALB creation)
 
-### Step 12: Wait for ALB to be Created
+### Step 13: Wait for ALB to be Created
 
 ```bash
 # Watch ingress until ADDRESS appears (takes 2-3 minutes)
@@ -548,7 +623,7 @@ Press `Ctrl+C` when you see an ADDRESS like:
 blog-site-ingress-xxxxx.ap-south-2.elb.amazonaws.com
 ```
 
-### Step 13: Point Your Domain to the ALB
+### Step 14: Point Your Domain to the ALB
 
 #### Get ALB IP Address
 
@@ -567,7 +642,7 @@ echo "Point your domain to: $ALB_IP"
 
 **Why?** This makes your domain name resolve to the AWS Load Balancer.
 
-### Step 14: Test Your Application
+### Step 15: Test Your Application
 
 Wait 1-2 minutes for DNS to propagate, then:
 
@@ -694,36 +769,116 @@ dig <YOUR-DOMAIN>.duckdns.org
 
 ## CI/CD Pipeline
 
-The project includes a GitHub Actions workflow (`.github/workflows/cicd.yaml`) that:
+The project includes a GitHub Actions workflow (`.github/workflows/cicd.yaml`) that automatically builds and publishes Docker images when code is pushed to the main branch.
 
-1. **Security Checks**
-   - Trivy filesystem scan for vulnerabilities
-   - Gitleaks scan for secrets in code
+### Pipeline Stages
 
-2. **Code Quality**
-   - SonarQube code analysis
-   - Quality gate check
+**1. Security Scan (Source Code)**
+   - **Trivy**: Scans filesystem for vulnerabilities in dependencies and code
+   - **Gitleaks**: Detects hardcoded secrets, API keys, and credentials
+   - **Why?** Catches security issues before they reach production
 
-3. **Build & Push**
-   - Detects changes in frontend/backend
-   - Builds Docker images with auto-incrementing tags
-   - Pushes to Docker Hub
+**2. Code Quality Check (SonarQube)**
+   - Analyzes code for bugs, code smells, and security vulnerabilities
+   - Enforces quality gate (fails pipeline if quality standards not met)
+   - **Why?** Maintains code quality and prevents technical debt
+
+**3. Detect Changed Services**
+   - Uses path filters to detect changes in `frontend/` or `server/` directories
+   - Only builds services that have changed
+   - **Why?** Saves time and resources by avoiding unnecessary builds
+
+**4. Frontend Build + Security + Push** (if frontend changed)
+   - Builds multi-platform Docker image (AMD64 + ARM64)
+   - Scans container image with Trivy for vulnerabilities
+   - Generates SBOM (Software Bill of Materials) for supply chain security
+   - Pushes to Docker Hub with version tag (`v1-<git-sha>`) and `latest`
+   - **Why?** Ensures only secure, tested images are deployed
+
+**5. Backend Build + Security + Push** (if backend changed)
+   - Same process as frontend
+   - Independent pipeline allows parallel execution
+
+### Image Tagging Strategy
+
+Images are tagged with:
+- **Version tag**: `v1-<short-git-sha>` (e.g., `v1-a1b2c3d`) - immutable, traceable to specific commit
+- **Latest tag**: `latest` - always points to most recent build
+
+**Why this approach?**
+- Git SHA provides traceability (know exactly which code is running)
+- `latest` tag simplifies development/testing
+- Immutable version tags enable easy rollback
 
 ### Setup CI/CD
 
-1. **Add GitHub Secrets** (Settings → Secrets and variables → Actions):
+**1. Add GitHub Secrets** (Settings → Secrets and variables → Actions):
    - `DOCKER_USERNAME`: Your Docker Hub username
-   - `DOCKER_TOKEN`: Docker Hub access token
-   - `SONAR_TOKEN`: SonarQube token
+   - `DOCKER_TOKEN`: Docker Hub access token (not password!)
+   - `SONAR_TOKEN`: SonarQube authentication token
 
-2. **Add GitHub Variables**:
-   - `SONAR_HOST_URL`: Your SonarQube server URL
+**2. Add GitHub Variables**:
+   - `SONAR_HOST_URL`: Your SonarQube server URL (e.g., `https://sonarqube.example.com`)
 
-3. **Push to main branch** to trigger the pipeline
+**3. Trigger the Pipeline**:
+   - Push code to `main` branch
+   - Pipeline runs automatically
+   - Check Actions tab in GitHub to monitor progress
+
+### Integrating with ArgoCD
+
+After the CI/CD pipeline pushes new images:
+
+**Automated approach** (implemented with Kustomize):
+- CI/CD pipeline automatically updates `kustomization.yaml` with new image tags
+- Uses `kustomize edit set image` command (clean, declarative)
+- Commits changes back to repository with `[skip ci]` to prevent loops
+- ArgoCD detects changes and syncs automatically
+
+**How it works:**
+```yaml
+# Job in CI/CD pipeline
+- name: Update frontend image tag
+  run: |
+    cd kubernetes-manifests
+    kustomize edit set image blog-site-frontend=${{ secrets.DOCKER_USERNAME }}/blog-site-frontend:v1-a1b2c3d
+    
+- name: Commit and push
+  run: |
+    git commit -m "🚀 Update image tags [skip ci]"
+    git push
+```
+
+**Why Kustomize over sed/yq?**
+- ✅ Declarative image management
+- ✅ Built-in YAML validation
+- ✅ Industry standard for Kubernetes
+- ✅ Native ArgoCD support
+- ✅ No regex needed (cleaner, safer)
+
+**Result:** Push code → CI/CD builds → Updates manifests → ArgoCD deploys → FULLY AUTOMATED! 🎉
 
 ---
 
 ## Architecture Decisions
+
+### Why Kustomize for Manifest Management?
+
+**Problem:** Updating image tags in YAML files is error-prone with sed/awk.
+
+**Solution:** Kustomize provides declarative image management:
+```yaml
+images:
+  - name: blog-site-frontend
+    newName: abhi00shek/blog-site-frontend
+    newTag: v1-a1b2c3d
+```
+
+**Benefits:**
+- Clean separation of base config and overlays
+- Built-in validation
+- Native Kubernetes tool
+- ArgoCD native support
 
 ### Why Sealed Secrets?
 
