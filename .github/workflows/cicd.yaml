@@ -242,3 +242,98 @@ jobs:
             git commit -m "🚀 Update image tags to ${{ steps.tag.outputs.tag }} [skip ci]"
             git push
           fi
+
+
+# -------------------------------------------------
+# 7. COST TRACKING & REPORTING
+# -------------------------------------------------
+  cost-tracking:
+    runs-on: ubuntu-latest
+    needs: [update-manifests]
+    if: always()
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Calculate Docker Image Sizes
+        run: |
+          echo "## 💰 Cost Tracking Report" > cost-report.md
+          echo "" >> cost-report.md
+          echo "**Build Date:** $(date)" >> cost-report.md
+          echo "**Commit:** ${GITHUB_SHA::7}" >> cost-report.md
+          echo "" >> cost-report.md
+          
+          # Calculate image sizes (approximate)
+          echo "### Docker Image Sizes" >> cost-report.md
+          echo "" >> cost-report.md
+          
+          # Frontend size estimation
+          FRONTEND_SIZE=$(docker manifest inspect ${{ secrets.DOCKER_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:latest 2>/dev/null | grep -o '"size":[0-9]*' | head -1 | cut -d':' -f2 || echo "0")
+          FRONTEND_MB=$((FRONTEND_SIZE / 1024 / 1024))
+          echo "- **Frontend Image:** ${FRONTEND_MB} MB" >> cost-report.md
+          
+          # Backend size estimation
+          BACKEND_SIZE=$(docker manifest inspect ${{ secrets.DOCKER_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:latest 2>/dev/null | grep -o '"size":[0-9]*' | head -1 | cut -d':' -f2 || echo "0")
+          BACKEND_MB=$((BACKEND_SIZE / 1024 / 1024))
+          echo "- **Backend Image:** ${BACKEND_MB} MB" >> cost-report.md
+          
+          echo "" >> cost-report.md
+          
+      - name: Calculate Pipeline Cost
+        run: |
+          echo "### Pipeline Execution Cost" >> cost-report.md
+          echo "" >> cost-report.md
+          
+          # GitHub Actions pricing: $0.008 per minute for Linux runners
+          ESTIMATED_MINUTES=12
+          COST_PER_MINUTE=0.008
+          PIPELINE_COST=$(echo "$ESTIMATED_MINUTES * $COST_PER_MINUTE" | bc -l)
+          
+          echo "- **Estimated Pipeline Duration:** ~${ESTIMATED_MINUTES} minutes" >> cost-report.md
+          echo "- **Pipeline Cost:** \$${PIPELINE_COST}" >> cost-report.md
+          echo "" >> cost-report.md
+          
+      - name: Estimate Infrastructure Cost
+        run: |
+          echo "### Monthly Infrastructure Cost Estimate" >> cost-report.md
+          echo "" >> cost-report.md
+          echo "| Resource | Quantity | Unit Cost | Monthly Cost |" >> cost-report.md
+          echo "|----------|----------|-----------|--------------|" >> cost-report.md
+          echo "| EKS Control Plane | 1 | \$73/month | \$73 |" >> cost-report.md
+          echo "| EC2 t3.medium | 3 nodes | \$30/month | \$90 |" >> cost-report.md
+          echo "| EBS gp3 (10GB) | 2 volumes | \$0.50/month | \$1 |" >> cost-report.md
+          echo "| ALB | 1 | \$18/month | \$18 |" >> cost-report.md
+          echo "| Data Transfer | Variable | ~\$5/month | \$5 |" >> cost-report.md
+          echo "| **Total** | | | **~\$187/month** |" >> cost-report.md
+          echo "" >> cost-report.md
+          
+          echo "### Cost Optimization Recommendations" >> cost-report.md
+          echo "" >> cost-report.md
+          echo "- ✅ Using HPA for auto-scaling (saves ~\$30/month)" >> cost-report.md
+          echo "- ✅ Using gp3 instead of gp2 (saves ~\$0.20/month)" >> cost-report.md
+          echo "- ✅ Resource limits prevent over-provisioning" >> cost-report.md
+          echo "- 💡 Consider Spot instances for non-prod (save ~40%)" >> cost-report.md
+          echo "- 💡 Use Cluster Autoscaler to scale nodes (save ~\$30/month)" >> cost-report.md
+          echo "" >> cost-report.md
+          
+      - name: Upload Cost Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cost-report
+          path: cost-report.md
+          retention-days: 90
+          
+      - name: Comment Cost Report on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('cost-report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });

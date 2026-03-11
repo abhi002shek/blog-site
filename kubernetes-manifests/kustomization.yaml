@@ -14,6 +14,11 @@ resources:
   - frontend.yml
   - frontend-service.yml
   - ingress.yml
+  - frontend-hpa.yml
+  - backend-hpa.yml
+  - frontend-network-policy.yml
+  - backend-network-policy.yml
+  - mongo-network-policy.yml
 
 images:
   - name: blog-site-frontend

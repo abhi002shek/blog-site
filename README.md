@@ -80,6 +80,38 @@ This project uses a **GitOps approach** with separation of concerns:
 
 ---
 
+## Production-Ready Features 🚀
+
+This project includes enterprise-grade features for production deployments:
+
+### Security
+- ✅ **Sealed Secrets**: Encrypted secrets safe for Git storage
+- ✅ **Network Policies**: Pod-to-pod traffic restrictions
+- ✅ **Security Scanning**: Trivy + Gitleaks in CI/CD
+- ✅ **SBOM Generation**: Software Bill of Materials for supply chain security
+- ✅ **Resource Limits**: Prevent resource exhaustion attacks
+
+### Reliability
+- ✅ **Health Checks**: Liveness and readiness probes
+- ✅ **High Availability**: Multi-replica deployments with anti-affinity
+- ✅ **Auto-Scaling**: HPA based on CPU and memory metrics
+- ✅ **Rolling Updates**: Zero-downtime deployments
+- ✅ **Persistent Storage**: StatefulSet with EBS volumes
+
+### Observability
+- ✅ **Monitoring Stack**: Prometheus + Grafana ready
+- ✅ **Cost Tracking**: Automated cost reports in CI/CD
+- ✅ **Health Endpoints**: Application health monitoring
+- ✅ **Metrics Collection**: Ready for metrics server
+
+### Operations
+- ✅ **GitOps**: Declarative deployment with ArgoCD
+- ✅ **Kustomize**: Clean image management without templating
+- ✅ **Automated Deployments**: Full CI/CD automation
+- ✅ **Infrastructure as Code**: Terraform for EKS cluster
+
+---
+
 ## Prerequisites (Linux System)
 
 ### 1. Install Required Tools
@@ -435,6 +467,23 @@ kubectl get pods -n argocd
 
 All ArgoCD pods should be in `Running` status.
 
+#### 8e. Create ArgoCD Application (Declarative)
+
+```bash
+kubectl apply -f argocd/application.yaml
+```
+
+**What this does:** Creates an ArgoCD Application that:
+- Monitors your Git repository
+- Automatically syncs changes to cluster
+- Uses Kustomize to build manifests
+- Enables auto-healing and pruning
+
+**Verify in ArgoCD UI:**
+- Application should appear as "blog-site"
+- Sync status will show "OutOfSync" until you deploy manifests
+- After deployment, status will be "Synced" and "Healthy"
+
 ---
 
 ## Part 3: Prepare Application Secrets
@@ -700,6 +749,78 @@ curl http://<YOUR-DOMAIN>.duckdns.org/api/blogs
 ```
 
 Should return `[]` (empty array) initially.
+
+### Check HPA Status
+
+```bash
+kubectl get hpa
+```
+
+Expected output:
+```
+NAME           REFERENCE                       TARGETS         MINPODS   MAXPODS   REPLICAS
+backend-hpa    Deployment/backend              45%/70%, 30%/80%   2         10        2
+frontend-hpa   Deployment/frontend-deployment  50%/70%, 25%/80%   2         10        2
+```
+
+**Note:** Metrics may show `<unknown>` initially. Install Metrics Server:
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+### Check Network Policies
+
+```bash
+kubectl get networkpolicies
+```
+
+Expected output:
+```
+NAME                        POD-SELECTOR   AGE
+backend-network-policy      app=backend    5m
+frontend-network-policy     app=frontend   5m
+mongo-network-policy        app=mongo      5m
+```
+
+---
+
+## Part 7: Setup Monitoring (Optional but Recommended)
+
+### Install Prometheus + Grafana Stack
+
+```bash
+# Add Helm repo
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# Create monitoring namespace
+kubectl create namespace monitoring
+
+# Install stack
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+  --set grafana.adminPassword=admin123 \
+  --set prometheus.prometheusSpec.retention=7d
+```
+
+### Access Grafana
+
+```bash
+kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80
+```
+
+Open browser: `http://localhost:3000`
+- Username: `admin`
+- Password: `admin123`
+
+**Pre-configured dashboards available:**
+- Kubernetes Cluster Monitoring
+- Node Exporter Full
+- Kubernetes Pods
+- Kubernetes Deployments
+
+See `monitoring/README.md` for detailed instructions.
 
 ---
 

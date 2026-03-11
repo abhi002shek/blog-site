@@ -10,8 +10,15 @@ app.use(express.json());
 
 // Routes
 
-app.get("/health", (req, res) => {
-  res.status(200).send("OK");
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  const healthcheck = {
+    uptime: process.uptime(),
+    message: "OK",
+    timestamp: Date.now(),
+    mongodb: mongoose.connection.readyState === 1 ? "connected" : "disconnected"
+  };
+  res.status(200).json(healthcheck);
 });
 
 app.use("/api/blogs", require("./routes/blogRoutes"));
