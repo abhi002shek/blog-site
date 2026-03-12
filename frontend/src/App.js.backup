@@ -1,0 +1,274 @@
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import FloatingElements from './components/FloatingElements';
+import BlogCard3D from './components/BlogCard3D';
+import BlogModal3D from './components/BlogModal3D';
+import CreateBlogModal3D from './components/CreateBlogModal3D';
+import { useSecureAPI } from './hooks/useSecureAPI';
+import { useIntersectionObserver } from './hooks/useIntersectionObserver';
+import { fadeInUp, staggerContainer, buttonHover, floatingAnimation } from './utils/animations';
+import './App.css';
+
+function App() {
+  const [blogs, setBlogs] = useState([]);
+  const [selectedBlog, setSelectedBlog] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showBlogModal, setShowBlogModal] = useState(false);
+  
+  const { secureRequest, loading, error } = useSecureAPI();
+  const { ref: heroRef, hasIntersected: heroVisible } = useIntersectionObserver();
+
+  const API = ;
+
+  // Fetch blogs securely
+  const fetchBlogs = async () => {
+    try {
+      const data = await secureRequest('GET', API);
+      setBlogs(data);
+    } catch (error) {
+      console.error('Error fetching blogs:', error);
+    }
+  };
+
+  // Handle blog creation
+  const handleCreateBlog = async (formData) => {
+    try {
+      const newBlog = await secureRequest('POST', API, formData);
+      setBlogs([newBlog, ...blogs]);
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error('Error creating blog:', error);
+    }
+  };
+
+  // Handle blog read more
+  const handleReadMore = (blog) => {
+    setSelectedBlog(blog);
+    setShowBlogModal(true);
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowCreateModal(false);
+        setShowBlogModal(false);
+      }
+      if (e.key === 'n' && e.ctrlKey) {
+        e.preventDefault();
+        setShowCreateModal(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    fetchBlogs();
+  }, []);
+
+  return (
+    <div className=app-container>
+      {/* Floating 3D Background */}
+      <FloatingElements className=background-elements />
+      
+      {/* Navigation */}
+      <motion.nav 
+        className=navbar-3d
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.8, ease: easeOut }}
+      >
+        <motion.div 
+          className=logo-3d
+          {...floatingAnimation}
+        >
+          <span className=logo-text>Blog</span>
+          <span className=logo-accent>Site</span>
+        </motion.div>
+        
+        <motion.button
+          className=create-btn-3d
+          onClick={() => setShowCreateModal(true)}
+          {...buttonHover}
+        >
+          <span className=btn-icon>+</span>
+          <span>Create Blog</span>
+        </motion.button>
+      </motion.nav>
+
+      {/* Hero Section */}
+      <motion.section 
+        ref={heroRef}
+        className=hero-3d
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1.5 }}
+      >
+        <div className=hero-overlay></div>
+        <motion.div 
+          className=hero-content-3d
+          variants={staggerContainer}
+          initial=hidden
+          animate={heroVisible ? visible : hidden}
+        >
+          <motion.h1 
+            className=hero-title
+            variants={fadeInUp}
+          >
+            Explore the World
+            <motion.span 
+              className=title-accent
+              animate={{ 
+                backgroundPosition: [0% 50%, 100% 50%, 0% 50%],
+              }}
+              transition={{ duration: 3, repeat: Infinity }}
+            >
+              Through Stories
+            </motion.span>
+          </motion.h1>
+          
+          <motion.p 
+            className=hero-subtitle
+            variants={fadeInUp}
+          >
+            Share your journeys, inspire others, and discover amazing destinations
+          </motion.p>
+          
+          <motion.button
+            className=hero-cta
+            variants={fadeInUp}
+            {...buttonHover}
+            onClick={() => setShowCreateModal(true)}
+          >
+            Start Your Journey
+            <span className=cta-arrow>→</span>
+          </motion.button>
+        </motion.div>
+        
+        {/* Floating particles */}
+        <div className=hero-particles>
+          {[...Array(20)].map((_, i) => (
+            <motion.div
+              key={i}
+              className=particle
+              animate={{
+                y: [-20, -100, -20],
+                x: [0, Math.random() * 100 - 50, 0],
+                opacity: [0, 1, 0],
+              }}
+              transition={{
+                duration: 3 + Math.random() * 2,
+                repeat: Infinity,
+                delay: Math.random() * 2,
+              }}
+              style={{
+                left: ,
+                top: ,
+              }}
+            />
+          ))}
+        </div>
+      </motion.section>
+
+      {/* Blog Section */}
+      <motion.section 
+        className=blog-section-3d
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        transition={{ duration: 0.8 }}
+        viewport={{ once: true }}
+      >
+        <motion.div 
+          className=section-header
+          variants={fadeInUp}
+          initial=hidden
+          whileInView=visible
+          viewport={{ once: true }}
+        >
+          <h2 className=section-title-3d>Latest Stories</h2>
+          <div className=title-underline></div>
+        </motion.div>
+
+        {error && (
+          <motion.div 
+            className=error-message
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
+            {error}
+          </motion.div>
+        )}
+
+        <motion.div 
+          className=blog-grid-3d
+          variants={staggerContainer}
+          initial=hidden
+          whileInView=visible
+          viewport={{ once: true }}
+        >
+          {blogs.map((blog, index) => (
+            <BlogCard3D
+              key={blog._id}
+              blog={blog}
+              index={index}
+              onReadMore={handleReadMore}
+            />
+          ))}
+        </motion.div>
+
+        {blogs.length === 0 && !loading && (
+          <motion.div 
+            className=empty-state
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <div className=empty-icon>📝</div>
+            <h3>No stories yet</h3>
+            <p>Be the first to share your amazing journey!</p>
+            <motion.button
+              className=empty-cta
+              onClick={() => setShowCreateModal(true)}
+              {...buttonHover}
+            >
+              Create First Blog
+            </motion.button>
+          </motion.div>
+        )}
+      </motion.section>
+
+      {/* Loading indicator */}
+      {loading && (
+        <motion.div 
+          className=loading-overlay
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <motion.div
+            className=loading-spinner-3d
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: linear }}
+          />
+        </motion.div>
+      )}
+
+      {/* Modals */}
+      <CreateBlogModal3D
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreateBlog}
+        loading={loading}
+      />
+
+      <BlogModal3D
+        blog={selectedBlog}
+        isOpen={showBlogModal}
+        onClose={() => setShowBlogModal(false)}
+      />
+    </div>
+  );
+}
+
+export default App;
