@@ -11,7 +11,7 @@ env:
 jobs:
 
 # -------------------------------------------------
-# 1. SECURITY SCAN (SOURCE CODE) - SIMPLIFIED
+# 1. SECURITY SCAN (SOURCE CODE)
 # -------------------------------------------------
   security-check:
     runs-on: ubuntu-latest
@@ -37,7 +37,37 @@ jobs:
 
 
 # -------------------------------------------------
-# 2. DETECT CHANGED SERVICES
+# 2. CODE QUALITY CHECK (SONARQUBE) - FIXED
+# -------------------------------------------------
+  build_project_and_sonar:
+    runs-on: ubuntu-latest
+    needs: security-check
+    # Only run if SonarQube secrets are configured
+    if: vars.SONAR_HOST_URL != '' && secrets.SONAR_TOKEN != ''
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      - name: Check Sonar Quality Gate
+        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
+        with:
+          pollingTimeoutSec: 600
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        continue-on-error: true
+
+
+# -------------------------------------------------
+# 3. DETECT CHANGED SERVICES
 # -------------------------------------------------
   changes:
     runs-on: ubuntu-latest
@@ -62,7 +92,7 @@ jobs:
 
 
 # -------------------------------------------------
-# 3. FRONTEND BUILD + PUSH (Only if Docker secrets exist)
+# 4. FRONTEND BUILD + PUSH
 # -------------------------------------------------
   frontend:
     runs-on: ubuntu-latest
@@ -99,7 +129,7 @@ jobs:
 
 
 # -------------------------------------------------
-# 4. BACKEND BUILD + PUSH (Only if Docker secrets exist)
+# 5. BACKEND BUILD + PUSH
 # -------------------------------------------------
   backend:
     runs-on: ubuntu-latest
@@ -133,3 +163,53 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+
+# -------------------------------------------------
+# 6. UPDATE KUBERNETES MANIFESTS (GITOPS)
+# -------------------------------------------------
+  update-manifests:
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    if: always() && (needs.frontend.result == 'success' || needs.backend.result == 'success' || needs.frontend.result == 'skipped' || needs.backend.result == 'skipped')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Install Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          
+      - name: Generate image tag
+        id: tag
+        run: echo "tag=v1-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          
+      - name: Update frontend image tag
+        if: needs.frontend.result == 'success'
+        run: |
+          cd kubernetes-manifests
+          kustomize edit set image blog-site-frontend=${{ secrets.DOCKER_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          
+      - name: Update backend image tag
+        if: needs.backend.result == 'success'
+        run: |
+          cd kubernetes-manifests
+          kustomize edit set image blog-site-backend=${{ secrets.DOCKER_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kubernetes-manifests/kustomization.yaml
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "🚀 Update image tags to ${{ steps.tag.outputs.tag }} [skip ci]"
+            git push
+          fi
