@@ -420,11 +420,11 @@ kubectl get pods -n kube-system | grep sealed-secrets
 
 **Why?** ArgoCD implements GitOps - it continuously monitors your Git repository and automatically syncs any changes to your Kubernetes cluster. This ensures your cluster state always matches what's defined in Git.
 
-#### 8a. Install ArgoCD
+#### 8a. Install ArgoCD (GitOps Way)
 
 ```bash
 kubectl create namespace argocd
-kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
 **What this does:** Deploys ArgoCD components including:
@@ -467,22 +467,30 @@ kubectl get pods -n argocd
 
 All ArgoCD pods should be in `Running` status.
 
-#### 8e. Create ArgoCD Application (Declarative)
+#### 8e. Deploy Your Application with ArgoCD (GitOps!)
+
+**This is the GitOps magic! Instead of manually applying manifests, let ArgoCD do it:**
 
 ```bash
 kubectl apply -f argocd/application.yaml
 ```
 
 **What this does:** Creates an ArgoCD Application that:
-- Monitors your Git repository
-- Automatically syncs changes to cluster
-- Uses Kustomize to build manifests
-- Enables auto-healing and pruning
+- **Monitors** your Git repository (`https://github.com/abhi002shek/blog-site.git`)
+- **Watches** the `kubernetes-manifests/` directory
+- **Uses Kustomize** to build final manifests
+- **Auto-syncs** changes (when you push to Git, ArgoCD deploys automatically!)
+- **Self-heals** (if someone manually changes cluster, ArgoCD reverts it)
+- **Prunes** deleted resources
 
 **Verify in ArgoCD UI:**
 - Application should appear as "blog-site"
-- Sync status will show "OutOfSync" until you deploy manifests
-- After deployment, status will be "Synced" and "Healthy"
+- Status will show "Synced" and "Healthy"
+- All resources visible in the UI
+
+**🎉 From now on:**
+- Push code → CI/CD builds image → Updates kustomization.yaml → ArgoCD deploys!
+- **No more `kubectl apply` needed!**
 
 ---
 

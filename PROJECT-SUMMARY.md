@@ -98,7 +98,7 @@ Total: 18 Kubernetes manifests, 4434 lines of documentation
 
 ---
 
-## 🚀 CI/CD Pipeline (7 Jobs)
+## 🚀 CI/CD Pipeline (6 Jobs)
 
 ### Job 1: Security Check
 - Trivy filesystem scan
@@ -131,13 +131,6 @@ Total: 18 Kubernetes manifests, 4434 lines of documentation
 - Update image tags in kustomization.yaml
 - Commit and push changes
 - Triggers ArgoCD sync
-
-### Job 7: Cost Tracking
-- Calculate image sizes
-- Estimate pipeline costs
-- Infrastructure cost breakdown
-- Optimization recommendations
-- Upload cost report artifact
 
 ---
 
@@ -365,7 +358,7 @@ Build Frontend          Build Backend
 
 You've built a **production-grade Kubernetes application** with:
 - ✅ 18 Kubernetes manifests
-- ✅ 7-stage CI/CD pipeline
+- ✅ 6-stage CI/CD pipeline
 - ✅ Full GitOps automation
 - ✅ Enterprise security features
 - ✅ Auto-scaling and HA
