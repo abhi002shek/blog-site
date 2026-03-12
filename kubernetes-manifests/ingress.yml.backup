@@ -20,7 +20,8 @@ metadata:
 spec:
   ingressClassName: alb
   rules:
-    - http:
+    - host: YOUR-DOMAIN.duckdns.org
+      http:
         paths:
           - path: /
             pathType: Prefix
