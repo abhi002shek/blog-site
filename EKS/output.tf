@@ -13,3 +13,11 @@ output "vpc_id" {
 output "subnet_ids" {
   value = aws_subnet.blog_site_subnet[*].id
 }
+
+output "aws_load_balancer_controller_role_arn" {
+  value = aws_iam_role.aws_load_balancer_controller.arn
+}
+
+output "oidc_provider_arn" {
+  value = aws_iam_openid_connect_provider.blog_site_oidc.arn
+}
