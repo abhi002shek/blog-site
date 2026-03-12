@@ -24,7 +24,7 @@ resources:
 images:
   - name: blog-site-frontend
     newName: abhi00shek/blog-site-frontend
-    newTag: latest
+    newTag: v1-3262e98
   - name: blog-site-backend
     newName: abhi00shek/blog-site-backend
-    newTag: latest
+    newTag: v1-3262e98
