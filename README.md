@@ -80,7 +80,7 @@ This project uses a **GitOps approach** with separation of concerns:
 
 ---
 
-## Production-Ready Features 🚀
+## Production-Ready Features 
 
 This project includes enterprise-grade features for production deployments:
 
@@ -488,7 +488,7 @@ kubectl apply -f argocd/application.yaml
 - Status will show "Synced" and "Healthy"
 - All resources visible in the UI
 
-**🎉 From now on:**
+** From now on:**
 - Push code → CI/CD builds image → Updates kustomization.yaml → ArgoCD deploys!
 - **No more `kubectl apply` needed!**
 
@@ -709,7 +709,7 @@ curl http://<YOUR-DOMAIN>.duckdns.org
 
 Or open in browser: `http://<YOUR-DOMAIN>.duckdns.org`
 
-You should see your blog application! 🎉
+You should see your blog application! 
 
 ---
 
@@ -974,7 +974,7 @@ After the CI/CD pipeline pushes new images:
     
 - name: Commit and push
   run: |
-    git commit -m "🚀 Update image tags [skip ci]"
+    git commit -m " Update image tags [skip ci]"
     git push
 ```
 
@@ -1165,4 +1165,4 @@ For issues or questions:
 
 ---
 
-**Happy Deploying! 🚀**
+**Happy Deploying! **
