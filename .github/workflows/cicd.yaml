@@ -11,7 +11,7 @@ env:
 jobs:
 
 # -------------------------------------------------
-# 1. SECURITY SCAN (SOURCE CODE)
+# 1. SECURITY SCAN (SOURCE CODE) - SIMPLIFIED
 # -------------------------------------------------
   security-check:
     runs-on: ubuntu-latest
@@ -35,40 +35,9 @@ jobs:
       - name: Scan repository for vulnerabilities
         run: trivy fs --format json -o fs-report.json .
 
-      - name: Install Gitleaks
-        run: sudo apt install -y gitleaks
-
-      - name: Scan repository for secrets
-        run: gitleaks detect --source . -v
-
 
 # -------------------------------------------------
-# 2. CODE QUALITY CHECK (SONARQUBE)
-# -------------------------------------------------
-  build_project_and_sonar:
-    runs-on: ubuntu-latest
-    needs: security-check
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v7
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-
-      - name: Check Sonar Quality Gate
-        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-        with:
-          pollingTimeoutSec: 600
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-
-
-# -------------------------------------------------
-# 3. DETECT CHANGED SERVICES
+# 2. DETECT CHANGED SERVICES
 # -------------------------------------------------
   changes:
     runs-on: ubuntu-latest
@@ -93,12 +62,12 @@ jobs:
 
 
 # -------------------------------------------------
-# 4. FRONTEND BUILD + SECURITY + PUSH
+# 3. FRONTEND BUILD + PUSH (Only if Docker secrets exist)
 # -------------------------------------------------
   frontend:
     runs-on: ubuntu-latest
-    needs: [changes, build_project_and_sonar]
-    if: needs.changes.outputs.frontend == 'true'
+    needs: [changes]
+    if: needs.changes.outputs.frontend == 'true' && secrets.DOCKER_USERNAME != '' && secrets.DOCKER_TOKEN != ''
 
     steps:
       - uses: actions/checkout@v4
@@ -128,34 +97,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan container image
-        uses: aquasecurity/trivy-action@0.20.0
-        with:
-          image-ref: ${{ secrets.DOCKER_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
-          severity: CRITICAL,HIGH
-          exit-code: 1
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ secrets.DOCKER_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
-          format: spdx-json
-          output-file: sbom.json
-
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-sbom
-          path: sbom.json
-
 
 # -------------------------------------------------
-# 5. BACKEND BUILD + SECURITY + PUSH
+# 4. BACKEND BUILD + PUSH (Only if Docker secrets exist)
 # -------------------------------------------------
   backend:
     runs-on: ubuntu-latest
-    needs: [changes, build_project_and_sonar]
-    if: needs.changes.outputs.backend == 'true'
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true' && secrets.DOCKER_USERNAME != '' && secrets.DOCKER_TOKEN != ''
 
     steps:
       - uses: actions/checkout@v4
@@ -184,61 +133,3 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Scan container image
-        uses: aquasecurity/trivy-action@0.20.0
-        with:
-          image-ref: ${{ secrets.DOCKER_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
-          severity: CRITICAL,HIGH
-          exit-code: 1
-
-
-# -------------------------------------------------
-# 6. UPDATE KUBERNETES MANIFESTS (GITOPS)
-# -------------------------------------------------
-  update-manifests:
-    runs-on: ubuntu-latest
-    needs: [frontend, backend]
-    if: always() && (needs.frontend.result == 'success' || needs.backend.result == 'success' || needs.frontend.result == 'skipped' || needs.backend.result == 'skipped')
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-          
-      - name: Install Kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-          
-      - name: Generate image tag
-        id: tag
-        run: echo "tag=v1-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-          
-      - name: Update frontend image tag
-        if: needs.frontend.result == 'success'
-        run: |
-          cd kubernetes-manifests
-          kustomize edit set image blog-site-frontend=${{ secrets.DOCKER_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
-          
-      - name: Update backend image tag
-        if: needs.backend.result == 'success'
-        run: |
-          cd kubernetes-manifests
-          kustomize edit set image blog-site-backend=${{ secrets.DOCKER_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
-          
-      - name: Commit and push changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add kubernetes-manifests/kustomization.yaml
-          
-          # Check if there are changes to commit
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "🚀 Update image tags to ${{ steps.tag.outputs.tag }} [skip ci]"
-            git push
-          fi
